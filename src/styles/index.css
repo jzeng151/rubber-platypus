@@ -91,3 +91,27 @@ html, body, #root {
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* Responsive: stack vertically on narrow screens */
+@media (max-width: 768px) {
+  .main {
+    flex-direction: column;
+  }
+  .viewport {
+    flex: none;
+    height: 50%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .chat-panel {
+    width: 100%;
+    min-width: unset;
+    flex: 1;
+  }
+  .nav {
+    padding: 8px 12px;
+  }
+  .nav-title {
+    font-size: 16px;
+  }
+}
