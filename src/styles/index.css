@@ -1,0 +1,93 @@
+:root {
+  --bg-viewport: #e8e0d6;
+  --bg-viewport-end: #d4cdc4;
+  --bg-chat: #ffffff;
+  --bg-nav: #ffffff;
+  --text-primary: #333333;
+  --text-secondary: #888888;
+  --accent: #8b7355;
+  --accent-dark: #4a3f35;
+  --border: #cccccc;
+  --border-light: #eeeeee;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text-primary);
+}
+
+/* Nav */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-nav);
+  height: 53px;
+}
+
+.nav-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.nav-title span {
+  color: var(--accent);
+}
+
+.mood-indicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Main layout */
+.main {
+  display: flex;
+  height: calc(100% - 53px);
+}
+
+/* Viewport (65%) */
+.viewport {
+  flex: 1;
+  position: relative;
+  background: linear-gradient(180deg, var(--bg-viewport) 0%, var(--bg-viewport-end) 100%);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.viewport-placeholder {
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Chat panel (35%) */
+.chat-panel {
+  width: 340px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-chat);
+}
+
+.chat-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
