@@ -2,6 +2,7 @@ import { ModeToggle } from './components/ModeToggle'
 import { MoodBubble } from './components/MoodBubble'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PlatypusViewport } from './components/PlatypusViewport'
+import { ChatPanel } from './components/ChatPanel'
 
 function App() {
   return (
@@ -18,7 +19,7 @@ function App() {
           </ErrorBoundary>
         </div>
         <div className="chat-panel">
-          <div className="chat-placeholder">Chat Panel</div>
+          <ChatPanel />
         </div>
       </div>
     </>
