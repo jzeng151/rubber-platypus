@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useChatStore } from '../store/useChatStore'
+import { sendMessage } from '../lib/socratic'
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages)
@@ -10,25 +11,22 @@ export function ChatPanel() {
 
   const [input, setInput] = useState('')
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim()
     if (!text || isLoading) return
 
     addMessage({ role: 'user', content: text, timestamp: Date.now() })
     setInput('')
-
-    // Stub: just echo back for now. API wiring comes in increment 7.
     setLoading(true)
-    setTimeout(() => {
-      addMessage({
-        role: 'assistant',
-        content: mode === 'socratic'
-          ? "That's interesting. Tell me more about what's happening."
-          : 'Quack!',
-        timestamp: Date.now(),
-      })
+
+    try {
+      const result = await sendMessage(useChatStore.getState().messages)
+      addMessage({ role: 'assistant', content: result.response, timestamp: Date.now() })
+    } catch {
+      addMessage({ role: 'assistant', content: '*confused platypus noises*', timestamp: Date.now() })
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
