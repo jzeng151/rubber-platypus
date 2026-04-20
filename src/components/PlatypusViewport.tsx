@@ -3,6 +3,7 @@ import { Environment, Center } from '@react-three/drei'
 import { Physics, RigidBody } from '@react-three/rapier'
 import { useViewportStore } from '../store/useViewportStore'
 import { PlatypusModel } from './PlatypusModel'
+import { InteractionHints } from './InteractionHints'
 
 function BoundaryWalls() {
   const { width, height } = useViewportStore((s) => s.boundarySize)
@@ -55,6 +56,7 @@ export function PlatypusViewport() {
         <BoundaryWalls />
         <Center>
           <PlatypusModel />
+          <InteractionHints />
         </Center>
       </Physics>
     </Canvas>
