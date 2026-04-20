@@ -179,10 +179,11 @@ export function PlatypusModel() {
       restitution={0.5}
       friction={0.7}
       enabledRotations={[true, true, false]}
+      position={[0, 1, 0]}
     >
       <group
         ref={groupRef}
-        scale={0.5}
+        scale={1}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
       >

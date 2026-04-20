@@ -1,13 +1,14 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Environment, Center } from '@react-three/drei'
+import { Environment } from '@react-three/drei'
 import { Physics, RigidBody } from '@react-three/rapier'
-import { useViewportStore } from '../store/useViewportStore'
 import { PlatypusModel } from './PlatypusModel'
 import { InteractionHints } from './InteractionHints'
 
 function BoundaryWalls() {
-  const { width, height } = useViewportStore((s) => s.boundarySize)
+  // Smaller play area that fits the camera view
+  const width = 6
+  const height = 4
   const wallThickness = 0.2
 
   return (
@@ -47,7 +48,7 @@ function BoundaryWalls() {
 export function PlatypusViewport() {
   return (
     <Canvas
-      camera={{ position: [0, 2, 5], fov: 50 }}
+      camera={{ position: [0, 1.5, 4], fov: 50 }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
@@ -55,12 +56,10 @@ export function PlatypusViewport() {
       <Environment preset="sunset" />
       <Physics gravity={[0, -9.81, 0]}>
         <BoundaryWalls />
-        <Center>
-          <Suspense fallback={null}>
-            <PlatypusModel />
-            <InteractionHints />
-          </Suspense>
-        </Center>
+        <Suspense fallback={null}>
+          <PlatypusModel />
+          <InteractionHints />
+        </Suspense>
       </Physics>
     </Canvas>
   )
