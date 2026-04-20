@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useChatStore } from '../store/useChatStore'
 import { sendMessage } from '../lib/socratic'
+import { generateQuackResponse, playQuackSound } from '../lib/quack'
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages)
@@ -17,8 +18,17 @@ export function ChatPanel() {
 
     addMessage({ role: 'user', content: text, timestamp: Date.now() })
     setInput('')
-    setLoading(true)
 
+    if (mode === 'quack') {
+      // Client-side quack: no API call
+      const quack = generateQuackResponse(text)
+      playQuackSound(quack.endsWith('?') ? 'question' : quack === quack.toUpperCase() ? 'loud' : text.length < 20 ? 'short' : 'long')
+      addMessage({ role: 'assistant', content: quack, timestamp: Date.now() })
+      return
+    }
+
+    // Socratic mode: call API
+    setLoading(true)
     try {
       const result = await sendMessage(useChatStore.getState().messages)
       addMessage({ role: 'assistant', content: result.response, timestamp: Date.now() })
