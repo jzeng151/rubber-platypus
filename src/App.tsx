@@ -1,5 +1,7 @@
 import { ModeToggle } from './components/ModeToggle'
 import { MoodBubble } from './components/MoodBubble'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { PlatypusViewport } from './components/PlatypusViewport'
 
 function App() {
   return (
@@ -11,7 +13,9 @@ function App() {
       </nav>
       <div className="main">
         <div className="viewport">
-          <div className="viewport-placeholder">3D Viewport</div>
+          <ErrorBoundary>
+            <PlatypusViewport />
+          </ErrorBoundary>
         </div>
         <div className="chat-panel">
           <div className="chat-placeholder">Chat Panel</div>
