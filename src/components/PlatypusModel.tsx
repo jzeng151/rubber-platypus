@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
-import { RigidBody } from '@react-three/rapier'
+import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import type { Group, Object3D, Vector3 } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { classifyGesture, type GestureType } from '../lib/classifyGesture'
@@ -175,15 +175,17 @@ export function PlatypusModel() {
   return (
     <RigidBody
       ref={rigidBodyRef}
-      colliders="hull"
+      colliders={false}
       restitution={0.5}
       friction={0.7}
       enabledRotations={[true, true, false]}
       position={[0, 1, 0]}
     >
+      <CuboidCollider args={[0.4, 0.5, 0.3]} position={[0, 0, 0]} />
       <group
         ref={groupRef}
-        scale={1}
+        scale={80}
+        position={[0, -0.8, 0]}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
       >
