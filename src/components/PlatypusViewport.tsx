@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Environment, Center } from '@react-three/drei'
 import { Physics, RigidBody } from '@react-three/rapier'
@@ -55,8 +56,10 @@ export function PlatypusViewport() {
       <Physics gravity={[0, -9.81, 0]}>
         <BoundaryWalls />
         <Center>
-          <PlatypusModel />
-          <InteractionHints />
+          <Suspense fallback={null}>
+            <PlatypusModel />
+            <InteractionHints />
+          </Suspense>
         </Center>
       </Physics>
     </Canvas>
