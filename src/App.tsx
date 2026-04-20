@@ -1,10 +1,19 @@
+import { useEffect } from 'react'
 import { ModeToggle } from './components/ModeToggle'
 import { MoodBubble } from './components/MoodBubble'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PlatypusViewport } from './components/PlatypusViewport'
 import { ChatPanel } from './components/ChatPanel'
+import { useMoodStore } from './store/useMoodStore'
 
 function App() {
+  // Check for idle (sleepy mood) every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      useMoodStore.getState().checkIdle()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
   return (
     <>
       <nav className="nav">

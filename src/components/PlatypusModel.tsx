@@ -6,6 +6,7 @@ import type { Group, Object3D, Vector3 } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { classifyGesture, type GestureType } from '../lib/classifyGesture'
 import { useInteractionStore } from '../store/useInteractionStore'
+import { useMoodStore, type Mood } from '../store/useMoodStore'
 
 // Interaction animation state
 interface AnimationState {
@@ -165,9 +166,9 @@ export function PlatypusModel() {
         animState.current = { type: null, startTime: 0, duration: 0 }
       }
     } else {
-      // Idle animation
-      if (hips) hips.position.y += Math.sin(time * 2) * delta * 0.05
-      if (head) head.rotation.z = Math.sin(time * 1.5) * 0.03
+      // Idle + mood-driven animation
+      const currentMood = useMoodStore.getState().mood
+      applyMoodAnimation(currentMood, time, delta, hips, head, neck, spine, spine01, leftArm, rightArm)
     }
   })
 
@@ -189,6 +190,51 @@ export function PlatypusModel() {
       </group>
     </RigidBody>
   )
+}
+
+function applyMoodAnimation(
+  mood: Mood,
+  time: number,
+  delta: number,
+  hips: Object3D | undefined,
+  head: Object3D | undefined,
+  neck: Object3D | undefined,
+  spine: Object3D | undefined,
+  spine01: Object3D | undefined,
+  leftArm: Object3D | undefined,
+  rightArm: Object3D | undefined,
+) {
+  switch (mood) {
+    case 'curious':
+      if (hips) hips.position.y += Math.sin(time * 2) * delta * 0.05
+      if (head) head.rotation.z = Math.sin(time * 1.5) * 0.03
+      break
+
+    case 'encouraged':
+      // Perked up, slight bounce
+      if (hips) hips.position.y += Math.abs(Math.sin(time * 3)) * delta * 0.08
+      if (spine01) spine01.rotation.x = -0.05 // lean forward slightly
+      if (head) head.rotation.z = Math.sin(time * 2) * 0.04
+      break
+
+    case 'celebrating':
+      // Bouncy jump + arm wave
+      if (hips) hips.position.y += Math.abs(Math.sin(time * 6)) * delta * 0.15
+      if (leftArm) leftArm.rotation.z = Math.sin(time * 8) * 0.5
+      if (rightArm) rightArm.rotation.z = -Math.sin(time * 8) * 0.5
+      break
+
+    case 'sleepy':
+      // Drooping head, slow breathing
+      if (neck) neck.rotation.x = 0.15 // head droops forward
+      if (head) head.rotation.z = 0
+      if (spine) {
+        const breathe = Math.sin(time * 0.8) * 0.02
+        spine.scale.y = 1 + breathe
+        spine.scale.x = 1 - breathe * 0.5
+      }
+      break
+  }
 }
 
 function resetBoneRotations(...bones: (Object3D | undefined)[]) {
