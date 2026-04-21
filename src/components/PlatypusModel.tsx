@@ -5,6 +5,7 @@ import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import type { Group, Object3D, SkinnedMesh, Euler, Vector3 } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { type GestureType } from '../lib/classifyGesture'
+import { type ModelConfig } from '../lib/modelConfigs'
 import { useInteractionStore } from '../store/useInteractionStore'
 import { useMoodStore, type Mood } from '../store/useMoodStore'
 
@@ -38,8 +39,12 @@ export interface PlatypusModelHandle {
   reset: () => void
 }
 
-export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusModel(_props, ref) {
-  const { scene } = useGLTF('/models/platypus.glb')
+interface PlatypusModelProps {
+  modelConfig: ModelConfig
+}
+
+export const PlatypusModel = forwardRef<PlatypusModelHandle, PlatypusModelProps>(function PlatypusModel({ modelConfig }, ref) {
+  const { scene } = useGLTF(modelConfig.glbPath)
   const groupRef = useRef<Group>(null)
   const rigidBodyRef = useRef<RapierRigidBody>(null)
   const animState = useRef<AnimationState>({ type: null, startTime: 0, duration: 0 })
@@ -63,7 +68,8 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
   const resetModel = useCallback(() => {
     const rb = rigidBodyRef.current
     if (!rb) return
-    rb.setTranslation({ x: 0, y: 0.5, z: 0 }, true)
+    const [sx, sy, sz] = modelConfig.startPosition
+    rb.setTranslation({ x: sx, y: sy, z: sz }, true)
     rb.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
     rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
     rb.setAngvel({ x: 0, y: 0, z: 0 }, true)
@@ -76,7 +82,7 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
     // Clear any active animation
     animState.current = { type: null, startTime: 0, duration: 0 }
     clearActiveAction()
-  }, [clearActiveAction])
+  }, [clearActiveAction, modelConfig.startPosition])
 
   useImperativeHandle(ref, () => ({ reset: resetModel }), [resetModel])
 
@@ -84,16 +90,17 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
     const mesh = scene.getObjectByProperty('type', 'SkinnedMesh') as SkinnedMesh | null
     if (mesh && mesh.skeleton) {
       const boneList = mesh.skeleton.bones
+      const boneMap = modelConfig.boneMap
       const findBone = (name: string) => boneList.find(b => b.name === name) ?? null
       bones.current = {
-        hips: findBone('Hips'),
-        head: findBone('Head'),
-        neck: findBone('neck'),
-        spine: findBone('Spine'),
-        spine01: findBone('Spine01'),
-        spine02: findBone('Spine02'),
-        leftArm: findBone('LeftArm'),
-        rightArm: findBone('RightArm'),
+        hips: findBone(boneMap.hips),
+        head: findBone(boneMap.head),
+        neck: boneMap.neck ? findBone(boneMap.neck) : null,
+        spine: findBone(boneMap.spine),
+        spine01: boneMap.spine01 ? findBone(boneMap.spine01) : null,
+        spine02: boneMap.spine02 ? findBone(boneMap.spine02) : null,
+        leftArm: boneMap.leftArm ? findBone(boneMap.leftArm) : null,
+        rightArm: boneMap.rightArm ? findBone(boneMap.rightArm) : null,
       }
       // Save initial rest pose for each bone
       const rest = restPose.current
@@ -114,7 +121,7 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
     } else {
       console.warn('No skinned mesh or skeleton found in model')
     }
-  }, [scene])
+  }, [scene, modelConfig.boneMap])
 
   const handleGesture = useCallback((gesture: GestureType, velocityX: number, velocityY: number) => {
     if (useInteractionStore.getState().activeAction) return
@@ -145,7 +152,6 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
           z: 0,
         }, true)
         animState.current = { type: 'toss', startTime: now, duration: 1500, dizzyUntil: now + 1500 }
-        setTimeout(() => clearActiveAction(), 1500)
         break
     }
   }, [activeAction, setActiveAction, clearActiveAction, dismissHint])
@@ -360,13 +366,15 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
       }
     } else if (state.type === 'toss') {
       if (state.dizzyUntil && now < state.dizzyUntil) {
+        // Gentle head wobble, not aggressive enough to stretch the face mesh
+        const wobbleDecay = 1 - ((now - state.startTime) / state.duration)
         if (b.head) {
-          b.head.rotation.z = Math.sin(time * 15) * 0.15
-          b.head.rotation.x = Math.cos(time * 12) * 0.1
+          b.head.rotation.z = Math.sin(time * 15) * 0.06 * wobbleDecay
         }
       } else if (state.dizzyUntil && now >= state.dizzyUntil) {
         restoreBone(b.head, restPose.current, 'head')
         animState.current = { type: null, startTime: 0, duration: 0 }
+        clearActiveAction()
       }
     } else {
       const currentMood = useMoodStore.getState().mood
@@ -384,12 +392,14 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusMo
       linearDamping={0.5}
       angularDamping={0.5}
       enabledRotations={[true, true, false]}
-      position={[0, 0.5, 0]}
+      position={modelConfig.startPosition}
     >
-      <CuboidCollider args={[0.25, 0.55, 0.2]} position={[0, 0.7, 0.05]} />
+      <CuboidCollider args={modelConfig.colliderArgs} position={modelConfig.colliderPosition} />
       <group
         ref={groupRef}
         onPointerDown={onPointerDown}
+        rotation={modelConfig.armatureCorrection}
+        scale={modelConfig.scale}
       >
         <primitive object={scene} />
       </group>
@@ -437,3 +447,4 @@ function restoreBone(bone: Object3D | null | undefined, restPose: Map<string, Bo
 }
 
 useGLTF.preload('/models/platypus.glb')
+useGLTF.preload('/models/platypus2/platypus2.glb')

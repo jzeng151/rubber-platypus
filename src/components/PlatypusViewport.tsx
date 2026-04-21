@@ -3,6 +3,8 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { Environment } from '@react-three/drei'
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier'
 import { PlatypusModel, type PlatypusModelHandle } from './PlatypusModel'
+import { useModelStore } from '../store/useModelStore'
+import { ALL_MODELS } from '../lib/modelConfigs'
 
 const btnBase: React.CSSProperties = {
   padding: '6px 14px',
@@ -62,6 +64,8 @@ function BoundaryWalls() {
 export function PlatypusViewport() {
   const modelRef = useRef<PlatypusModelHandle>(null)
   const [showHelp, setShowHelp] = useState(false)
+  const selectedModelId = useModelStore((s) => s.selectedModelId)
+  const modelConfig = ALL_MODELS[selectedModelId] ?? ALL_MODELS['biped']
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -75,7 +79,7 @@ export function PlatypusViewport() {
         <Environment preset="lobby" />
         <Physics gravity={[0, -4, 0]}>
           <BoundaryWalls />
-          <PlatypusModel ref={modelRef} />
+          <PlatypusModel ref={modelRef} key={selectedModelId} modelConfig={modelConfig} />
         </Physics>
       </Canvas>
       <div style={{

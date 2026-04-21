@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { ModeToggle } from './components/ModeToggle'
+import { ModelToggle } from './components/ModelToggle'
 import { MoodBubble } from './components/MoodBubble'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PlatypusViewport } from './components/PlatypusViewport'
@@ -18,6 +19,7 @@ function App() {
     <>
       <nav className="nav">
         <div className="nav-title"><span>Rubber</span> Platypus</div>
+        <ModelToggle />
         <ModeToggle />
         <MoodBubble />
       </nav>
