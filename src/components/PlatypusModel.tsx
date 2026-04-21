@@ -1,38 +1,123 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
-import type { Group, Object3D, Vector3 } from 'three'
+import type { Group, Object3D, SkinnedMesh, Euler, Vector3 } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
-import { classifyGesture, type GestureType } from '../lib/classifyGesture'
+import { type GestureType } from '../lib/classifyGesture'
 import { useInteractionStore } from '../store/useInteractionStore'
 import { useMoodStore, type Mood } from '../store/useMoodStore'
 
-// Interaction animation state
 interface AnimationState {
   type: GestureType | null
   startTime: number
   duration: number
-  // squish specific
-  squishProgress?: number
-  // toss/dizzy specific
   dizzyUntil?: number
+  squishAmount?: number
+  releasing?: boolean
+  releaseStartTime?: number
 }
 
-export function PlatypusModel() {
+interface BoneCache {
+  hips: Object3D | null
+  head: Object3D | null
+  neck: Object3D | null
+  spine: Object3D | null
+  spine01: Object3D | null
+  spine02: Object3D | null
+  leftArm: Object3D | null
+  rightArm: Object3D | null
+}
+
+interface BoneRestPose {
+  rotation: Euler
+  scale: Vector3
+}
+
+export interface PlatypusModelHandle {
+  reset: () => void
+}
+
+export const PlatypusModel = forwardRef<PlatypusModelHandle>(function PlatypusModel(_props, ref) {
   const { scene } = useGLTF('/models/platypus.glb')
   const groupRef = useRef<Group>(null)
   const rigidBodyRef = useRef<RapierRigidBody>(null)
   const animState = useRef<AnimationState>({ type: null, startTime: 0, duration: 0 })
-
-  // Pointer tracking
   const pointerStart = useRef<{ x: number; y: number; time: number } | null>(null)
+  const screenStart = useRef<{ x: number; y: number; time: number } | null>(null)
+  const lastScreenPos = useRef<{ x: number; y: number } | null>(null)
+  const lastClickTime = useRef(0)
+  const petTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const squishStartTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isSecondClick = useRef(false)
 
   const { activeAction, setActiveAction, clearActiveAction, dismissHint } = useInteractionStore()
 
-  const handleGesture = useCallback((gesture: GestureType, velocityX: number, velocityY: number) => {
-    if (activeAction) return // interaction lock
+  // Cache bone refs via the SkinnedMesh skeleton on mount
+  const bones = useRef<BoneCache>({
+    hips: null, head: null, neck: null, spine: null,
+    spine01: null, spine02: null, leftArm: null, rightArm: null,
+  })
+  const restPose = useRef<Map<string, BoneRestPose>>(new Map())
 
+  const resetModel = useCallback(() => {
+    const rb = rigidBodyRef.current
+    if (!rb) return
+    rb.setTranslation({ x: 0, y: 0.5, z: 0 }, true)
+    rb.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
+    rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    rb.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    // Restore all bones to rest pose
+    const rp = restPose.current
+    const b = bones.current
+    for (const key of Object.keys(b) as (keyof BoneCache)[]) {
+      restoreBone(b[key], rp, key)
+    }
+    // Clear any active animation
+    animState.current = { type: null, startTime: 0, duration: 0 }
+    clearActiveAction()
+  }, [clearActiveAction])
+
+  useImperativeHandle(ref, () => ({ reset: resetModel }), [resetModel])
+
+  useEffect(() => {
+    const mesh = scene.getObjectByProperty('type', 'SkinnedMesh') as SkinnedMesh | null
+    if (mesh && mesh.skeleton) {
+      const boneList = mesh.skeleton.bones
+      const findBone = (name: string) => boneList.find(b => b.name === name) ?? null
+      bones.current = {
+        hips: findBone('Hips'),
+        head: findBone('Head'),
+        neck: findBone('neck'),
+        spine: findBone('Spine'),
+        spine01: findBone('Spine01'),
+        spine02: findBone('Spine02'),
+        leftArm: findBone('LeftArm'),
+        rightArm: findBone('RightArm'),
+      }
+      // Save initial rest pose for each bone
+      const rest = restPose.current
+      for (const [key, bone] of Object.entries(bones.current)) {
+        if (bone) {
+          rest.set(key, {
+            rotation: bone.rotation.clone(),
+            scale: bone.scale.clone(),
+          })
+        }
+      }
+      console.log('Bone cache:', Object.fromEntries(
+        Object.entries(bones.current).map(([k, v]) => [k, v ? v.name : 'NOT FOUND'])
+      ))
+      console.log('Rest pose saved:', Object.fromEntries(
+        [...rest.entries()].map(([k, v]) => [k, { rx: v.rotation.x.toFixed(4), ry: v.rotation.y.toFixed(4), rz: v.rotation.z.toFixed(4), sx: v.scale.x.toFixed(4) }])
+      ))
+    } else {
+      console.warn('No skinned mesh or skeleton found in model')
+    }
+  }, [scene])
+
+  const handleGesture = useCallback((gesture: GestureType, velocityX: number, velocityY: number) => {
+    if (useInteractionStore.getState().activeAction) return
     const rb = rigidBodyRef.current
     if (!rb) return
 
@@ -45,209 +130,310 @@ export function PlatypusModel() {
         animState.current = { type: 'pet', startTime: now, duration: 800 }
         setTimeout(() => clearActiveAction(), 800)
         break
-
       case 'bonk':
-        rb.applyImpulse({ x: 0, y: 3, z: 0 }, true)
-        animState.current = { type: 'bonk', startTime: now, duration: 500 }
-        setTimeout(() => clearActiveAction(), 500)
+        animState.current = { type: 'bonk', startTime: now, duration: 600 }
+        setTimeout(() => clearActiveAction(), 600)
         break
-
       case 'squish':
-        animState.current = { type: 'squish', startTime: now, duration: 99999, squishProgress: 0 }
+        animState.current = { type: 'squish', startTime: now, duration: 99999 }
         break
-
       case 'toss':
-        rb.applyImpulse({ x: velocityX * 5, y: Math.abs(velocityY) * 5, z: 0 }, true)
+        rb.wakeUp()
+        rb.applyImpulse({
+          x: Math.max(-3, Math.min(3, velocityX * 8)),
+          y: Math.min(3, Math.abs(velocityY) * 8) + 1.5,
+          z: 0,
+        }, true)
         animState.current = { type: 'toss', startTime: now, duration: 1500, dizzyUntil: now + 1500 }
         setTimeout(() => clearActiveAction(), 1500)
         break
     }
   }, [activeAction, setActiveAction, clearActiveAction, dismissHint])
 
-  const onPointerDown = useCallback((e: { point: Vector3; stopPropagation: () => void }) => {
+  const onPointerDown = useCallback((e: { point: { x: number; y: number }; clientX: number; clientY: number; stopPropagation: () => void }) => {
     e.stopPropagation()
     pointerStart.current = { x: e.point.x, y: e.point.y, time: performance.now() }
-  }, [])
+    screenStart.current = { x: e.clientX, y: e.clientY, time: performance.now() }
+    lastScreenPos.current = { x: e.clientX, y: e.clientY }
 
-  const onPointerUp = useCallback((e: { point: Vector3; stopPropagation: () => void }) => {
-    e.stopPropagation()
-    if (!pointerStart.current) return
+    // If this is the second click of a double-click, start squish timer
+    if (isSecondClick.current && !useInteractionStore.getState().activeAction) {
+      squishStartTimer.current = setTimeout(() => {
+        squishStartTimer.current = null
+        const now = performance.now()
+        dismissHint('squish')
+        setActiveAction('squish')
+        animState.current = { type: 'squish', startTime: now, duration: 99999 }
+      }, 200)
+    }
+  }, [setActiveAction, dismissHint])
 
-    const elapsed = performance.now() - pointerStart.current.time
-    const dx = e.point.x - pointerStart.current.x
-    const dy = e.point.y - pointerStart.current.y
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const velocity = elapsed > 0 ? distance / elapsed : 0
-
-    // Determine target (head vs body) based on Y position
-    const target = e.point.y > 0.3 ? 'head' as const : 'body' as const
-
-    const gesture = classifyGesture({
-      startX: pointerStart.current.x,
-      startY: pointerStart.current.y,
-      endX: e.point.x,
-      endY: e.point.y,
-      startTime: pointerStart.current.time,
-      endTime: performance.now(),
-      target,
-    })
-
-    if (gesture) {
-      const velX = distance > 0 ? dx / distance * velocity : 0
-      const velY = distance > 0 ? dy / distance * velocity : 0
-      handleGesture(gesture, velX, velY)
+  const handlePointerUp = useCallback(() => {
+    // Cancel pending squish timer
+    if (squishStartTimer.current) {
+      clearTimeout(squishStartTimer.current)
+      squishStartTimer.current = null
     }
 
+    if (!screenStart.current) return
+
+    const ss = screenStart.current
+    const se = lastScreenPos.current ?? { x: ss.x, y: ss.y }
+    const now = performance.now()
+    const dx = se.x - ss.x
+    const dy = se.y - ss.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    const elapsed = now - ss.time
+    const velocity = elapsed > 0 ? distance / elapsed : 0
+    screenStart.current = null
     pointerStart.current = null
+
+    // If actively squishing, release with spring-back
+    if (animState.current.type === 'squish' && !animState.current.releasing) {
+      const squishBones = [bones.current.head, bones.current.spine, bones.current.spine01, bones.current.spine02, bones.current.hips].filter(Boolean) as Object3D[]
+      const currentSquish = squishBones.length > 0 ? 1 - squishBones[0].scale.y : 0
+      animState.current.releasing = true
+      animState.current.squishAmount = currentSquish
+      animState.current.releaseStartTime = now
+      isSecondClick.current = false
+      return
+    }
+
+    // Toss: fast drag on screen (px/ms)
+    if (velocity > 0.5) {
+      isSecondClick.current = false
+      const dirX = distance > 0 ? dx / distance : 0
+      const dirY = distance > 0 ? dy / distance : 0
+      handleGesture('toss', dirX * velocity, dirY * velocity)
+      return
+    }
+
+    // Click handling (no significant drag on screen, > 5px)
+    if (distance < 5) {
+      if (isSecondClick.current) {
+        isSecondClick.current = false
+        handleGesture('bonk', 0, 0)
+        return
+      }
+      lastClickTime.current = now
+      isSecondClick.current = true
+      petTimeout.current = setTimeout(() => {
+        petTimeout.current = null
+        isSecondClick.current = false
+        handleGesture('pet', 0, 0)
+      }, 350)
+    } else {
+      isSecondClick.current = false
+    }
   }, [handleGesture])
 
-  // Bone-driven animation loop
-  useFrame((_, delta) => {
-    if (!groupRef.current) return
+  // Window-level listeners for drag tracking and release
+  useEffect(() => {
+    const onUp = () => handlePointerUp()
+    const onMove = (e: PointerEvent) => {
+      lastScreenPos.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointermove', onMove)
+    return () => {
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointermove', onMove)
+    }
+  }, [handlePointerUp])
 
+  useFrame(() => {
+    const rb = rigidBodyRef.current
+    // Safety clamp: keep platypus inside visible area
+    if (rb) {
+      const p = rb.translation()
+      const clamped = false
+        || Math.abs(p.x) > 1.3
+        || p.y < -0.1 || p.y > 2.8
+        || p.z < -1.3 || p.z > 1.3
+      if (clamped) {
+        rb.setTranslation({
+          x: Math.max(-1.3, Math.min(1.3, p.x)),
+          y: Math.max(-0.1, Math.min(2.8, p.y)),
+          z: Math.max(-1.3, Math.min(1.3, p.z)),
+        }, true)
+        rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        rb.setAngvel({ x: 0, y: 0, z: 0 }, true)
+      }
+    }
+
+    const b = bones.current
     const time = performance.now() / 1000
     const now = performance.now()
     const state = animState.current
 
-    // Get bones
-    const hips = groupRef.current.getObjectByName('Hips')
-    const head = groupRef.current.getObjectByName('Head')
-    const neck = groupRef.current.getObjectByName('neck')
-    const spine = groupRef.current.getObjectByName('Spine')
-    const spine01 = groupRef.current.getObjectByName('Spine01')
-    const spine02 = groupRef.current.getObjectByName('Spine02')
-    const leftArm = groupRef.current.getObjectByName('LeftArm')
-    const rightArm = groupRef.current.getObjectByName('RightArm')
-
     if (state.type === 'pet') {
       const progress = (now - state.startTime) / state.duration
-      const wiggle = Math.sin(progress * Math.PI * 6) * (1 - progress)
-      if (spine) spine.rotation.z = wiggle * 0.15
-      if (spine01) spine01.rotation.z = wiggle * 0.1
-      if (leftArm) leftArm.rotation.z = wiggle * 0.2
-      if (rightArm) rightArm.rotation.z = -wiggle * 0.2
-      // Reset when done
+      const decay = 1 - progress
+      const pulse = Math.sin(progress * Math.PI * 8) * decay * 0.03
+      if (b.head) b.head.rotation.z = Math.sin(progress * Math.PI * 4) * decay * 0.08
+      if (b.neck) b.neck.rotation.z = Math.sin(progress * Math.PI * 4) * decay * 0.04
+      if (b.spine) {
+        b.spine.scale.y = 1 + pulse
+        b.spine.scale.x = 1 - pulse * 0.5
+      }
+      if (b.spine01) {
+        b.spine01.scale.y = 1 + pulse
+        b.spine01.scale.x = 1 - pulse * 0.5
+      }
       if (progress >= 1) {
-        resetBoneRotations(spine, spine01, leftArm, rightArm)
+        const rp = restPose.current
+        restoreBone(b.head, rp, 'head')
+        restoreBone(b.neck, rp, 'neck')
+        restoreBone(b.spine, rp, 'spine')
+        restoreBone(b.spine01, rp, 'spine01')
         animState.current = { type: null, startTime: 0, duration: 0 }
       }
     } else if (state.type === 'bonk') {
+      // Full body compress, auto-plays on tap
       const progress = (now - state.startTime) / state.duration
-      const recoil = Math.sin(progress * Math.PI) * (1 - progress)
-      if (head) head.rotation.x = -recoil * 0.3
-      if (neck) neck.rotation.x = -recoil * 0.15
-      if (spine02) spine02.scale.setScalar(1 + recoil * 0.05)
+      const spines = [b.spine, b.spine01, b.spine02].filter(Boolean) as Object3D[]
+      if (progress < 0.33) {
+        // Compress phase
+        const compressProgress = progress / 0.33
+        const squishAmount = compressProgress * 0.4
+        spines.forEach(s => {
+          s.scale.y = 1 - squishAmount
+          s.scale.x = 1 + squishAmount * 0.5
+          s.scale.z = 1 + squishAmount * 0.5
+        })
+      } else {
+        // Spring-back phase
+        const releaseProgress = Math.min((progress - 0.33) / 0.67, 1)
+        const eased = 1 - (1 - releaseProgress) * (1 - releaseProgress)
+        const squishAmount = 0.4 * (1 - eased)
+        spines.forEach(s => {
+          s.scale.y = 1 - squishAmount
+          s.scale.x = 1 + squishAmount * 0.5
+          s.scale.z = 1 + squishAmount * 0.5
+        })
+      }
       if (progress >= 1) {
-        resetBoneRotations(head, neck)
-        if (spine02) spine02.scale.setScalar(1)
+        const rp = restPose.current
+        restoreBone(b.spine, rp, 'spine')
+        restoreBone(b.spine01, rp, 'spine01')
+        restoreBone(b.spine02, rp, 'spine02')
         animState.current = { type: null, startTime: 0, duration: 0 }
       }
     } else if (state.type === 'squish') {
-      // Squish is active until pointer release (handled externally)
-      // For now, progressive compression
-      const elapsed = (now - state.startTime) / 1000
-      const progress = Math.min(elapsed / 0.3, 1) // compress over 300ms
-      const squishAmount = progress * 0.4 // max 40% compression
-      const spines = [spine, spine01, spine02].filter(Boolean) as Object3D[]
-      spines.forEach(s => {
-        s.scale.y = 1 - squishAmount
-        s.scale.x = 1 + squishAmount * 0.5
-        s.scale.z = 1 + squishAmount * 0.5
-      })
+      // Head flatten + body shake, holds while pointer down
+      if (state.releasing && state.releaseStartTime != null && state.squishAmount != null) {
+        const releaseProgress = Math.min((now - state.releaseStartTime) / 300, 1)
+        const eased = 1 - (1 - releaseProgress) * (1 - releaseProgress)
+        const squishAmount = state.squishAmount * (1 - eased)
+        const squishBones = [b.head, b.spine, b.spine01, b.spine02, b.hips].filter(Boolean) as Object3D[]
+        squishBones.forEach(s => {
+          s.scale.y = 1 - squishAmount
+          s.scale.x = 1 + squishAmount * 0.5
+          s.scale.z = 1 + squishAmount * 0.5
+        })
+        if (releaseProgress >= 1) {
+          const rp = restPose.current
+          restoreBone(b.head, rp, 'head')
+          restoreBone(b.spine, rp, 'spine')
+          restoreBone(b.spine01, rp, 'spine01')
+          restoreBone(b.spine02, rp, 'spine02')
+          restoreBone(b.hips, rp, 'hips')
+          animState.current = { type: null, startTime: 0, duration: 0 }
+          clearActiveAction()
+        }
+      } else {
+        // Compress head + body
+        const elapsed = (now - state.startTime) / 1000
+        const compressProgress = Math.min(elapsed / 0.3, 1)
+        const squishAmount = compressProgress * 0.25
+        const squishBones = [b.head, b.spine, b.spine01, b.spine02, b.hips].filter(Boolean) as Object3D[]
+        squishBones.forEach(s => {
+          s.scale.y = 1 - squishAmount
+          s.scale.x = 1 + squishAmount * 0.5
+          s.scale.z = 1 + squishAmount * 0.5
+        })
+        // Shake body
+        const shake = Math.sin(time * 20) * 0.05
+        if (b.spine) b.spine.rotation.z = shake
+        if (b.spine01) b.spine01.rotation.z = shake * 0.7
+        if (b.hips) b.hips.rotation.z = shake * 0.3
+      }
     } else if (state.type === 'toss') {
-      // Check if dizzy phase
       if (state.dizzyUntil && now < state.dizzyUntil) {
-        if (head) {
-          head.rotation.z = Math.sin(time * 15) * 0.15
-          head.rotation.x = Math.cos(time * 12) * 0.1
+        if (b.head) {
+          b.head.rotation.z = Math.sin(time * 15) * 0.15
+          b.head.rotation.x = Math.cos(time * 12) * 0.1
         }
       } else if (state.dizzyUntil && now >= state.dizzyUntil) {
-        resetBoneRotations(head)
+        restoreBone(b.head, restPose.current, 'head')
         animState.current = { type: null, startTime: 0, duration: 0 }
       }
     } else {
-      // Idle + mood-driven animation
       const currentMood = useMoodStore.getState().mood
-      applyMoodAnimation(currentMood, time, delta, hips, head, neck, spine, spine01, leftArm, rightArm)
+      applyMoodAnimation(currentMood, time, b)
     }
+
   })
 
   return (
     <RigidBody
       ref={rigidBodyRef}
       colliders={false}
-      restitution={0.5}
+      restitution={0.3}
       friction={0.7}
+      linearDamping={0.5}
+      angularDamping={0.5}
       enabledRotations={[true, true, false]}
-      position={[0, 1, 0]}
+      position={[0, 0.5, 0]}
     >
-      <CuboidCollider args={[0.4, 0.5, 0.3]} position={[0, 0, 0]} />
+      <CuboidCollider args={[0.25, 0.55, 0.2]} position={[0, 0.7, 0.05]} />
       <group
         ref={groupRef}
-        scale={80}
-        position={[0, -0.8, 0]}
         onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
       >
         <primitive object={scene} />
       </group>
     </RigidBody>
   )
-}
+})
 
 function applyMoodAnimation(
   mood: Mood,
   time: number,
-  delta: number,
-  hips: Object3D | undefined,
-  head: Object3D | undefined,
-  neck: Object3D | undefined,
-  spine: Object3D | undefined,
-  spine01: Object3D | undefined,
-  leftArm: Object3D | undefined,
-  rightArm: Object3D | undefined,
+  b: BoneCache,
 ) {
   switch (mood) {
     case 'curious':
-      if (hips) hips.position.y += Math.sin(time * 2) * delta * 0.05
-      if (head) head.rotation.z = Math.sin(time * 1.5) * 0.03
+      if (b.hips) b.hips.rotation.y = Math.sin(time) * 0.1
+      if (b.head) b.head.rotation.z = Math.sin(time * 1.5) * 0.03
       break
-
     case 'encouraged':
-      // Perked up, slight bounce
-      if (hips) hips.position.y += Math.abs(Math.sin(time * 3)) * delta * 0.08
-      if (spine01) spine01.rotation.x = -0.05 // lean forward slightly
-      if (head) head.rotation.z = Math.sin(time * 2) * 0.04
+      if (b.spine01) b.spine01.rotation.x = -0.05
+      if (b.head) b.head.rotation.z = Math.sin(time * 2) * 0.04
       break
-
     case 'celebrating':
-      // Bouncy jump + arm wave
-      if (hips) hips.position.y += Math.abs(Math.sin(time * 6)) * delta * 0.15
-      if (leftArm) leftArm.rotation.z = Math.sin(time * 8) * 0.5
-      if (rightArm) rightArm.rotation.z = -Math.sin(time * 8) * 0.5
+      if (b.leftArm) b.leftArm.rotation.z = Math.sin(time * 8) * 0.5
+      if (b.rightArm) b.rightArm.rotation.z = -Math.sin(time * 8) * 0.5
       break
-
     case 'sleepy':
-      // Drooping head, slow breathing
-      if (neck) neck.rotation.x = 0.15 // head droops forward
-      if (head) head.rotation.z = 0
-      if (spine) {
+      if (b.neck) b.neck.rotation.x = 0.15
+      if (b.head) b.head.rotation.z = 0
+      if (b.spine) {
         const breathe = Math.sin(time * 0.8) * 0.02
-        spine.scale.y = 1 + breathe
-        spine.scale.x = 1 - breathe * 0.5
+        b.spine.scale.y = 1 + breathe
+        b.spine.scale.x = 1 - breathe * 0.5
       }
       break
   }
 }
 
-function resetBoneRotations(...bones: (Object3D | undefined)[]) {
-  bones.forEach(b => {
-    if (b) {
-      b.rotation.x = 0
-      b.rotation.y = 0
-      b.rotation.z = 0
-    }
-  })
+function restoreBone(bone: Object3D | null | undefined, restPose: Map<string, BoneRestPose>, key: string) {
+  if (!bone) return
+  const rest = restPose.get(key)
+  if (rest) {
+    bone.rotation.copy(rest.rotation)
+    bone.scale.copy(rest.scale)
+  }
 }
 
 useGLTF.preload('/models/platypus.glb')
