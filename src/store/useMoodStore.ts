@@ -1,66 +1,70 @@
 import { create } from 'zustand'
-import { canTransition, CELEBRATING_DURATION, SLEEPY_IDLE_MS } from '../lib/moodMachine'
+import { type GestureType } from '../lib/classifyGesture'
+import {
+  happinessToMood,
+  DEFAULT_HAPPINESS,
+  INTERACTION_HAPPINESS_DELTA,
+  RECOVERY_RATE,
+  RECOVERY_TARGET,
+} from '../lib/moodMachine'
 
-export type Mood = 'curious' | 'encouraged' | 'celebrating' | 'sleepy'
+export type Mood = 'happy' | 'content' | 'sad' | 'angry'
 
 interface MoodStore {
-  mood: Mood
-  lastInteractionTime: number
-  celebratingTimer: ReturnType<typeof setTimeout> | null
-  setMood: (mood: Mood) => void
-  transitionMood: (mood: Mood) => void
-  resetToCurious: () => void
-  checkIdle: () => void
-  recordInteraction: () => void
+  happiness: Record<string, number>
+  getMood: (modelId: string) => Mood
+  getHappiness: (modelId: string) => number
+  applyInteraction: (modelId: string, interaction: GestureType) => void
+  tickRecovery: () => void
 }
 
 export const useMoodStore = create<MoodStore>((set, get) => ({
-  mood: 'curious',
-  lastInteractionTime: Date.now(),
-  celebratingTimer: null,
-
-  setMood: (mood) => set({ mood }),
-
-  transitionMood: (mood) => {
-    const current = get().mood
-    if (!canTransition(current, mood)) return
-
-    // Clear any existing celebrating timer
-    const timer = get().celebratingTimer
-    if (timer) clearTimeout(timer)
-
-    let newTimer: ReturnType<typeof setTimeout> | null = null
-    if (mood === 'celebrating') {
-      // Auto-reset to curious after 5 seconds
-      newTimer = setTimeout(() => {
-        set({ mood: 'curious', celebratingTimer: null })
-      }, CELEBRATING_DURATION)
-    }
-
-    set({ mood, celebratingTimer: newTimer, lastInteractionTime: Date.now() })
+  happiness: {
+    biped: DEFAULT_HAPPINESS,
+    quadruped: DEFAULT_HAPPINESS,
   },
 
-  resetToCurious: () => {
-    const timer = get().celebratingTimer
-    if (timer) clearTimeout(timer)
-    set({ mood: 'curious', celebratingTimer: null })
+  getMood: (modelId: string): Mood => {
+    const h = get().happiness[modelId] ?? DEFAULT_HAPPINESS
+    return happinessToMood(h)
   },
 
-  checkIdle: () => {
-    const { mood, lastInteractionTime } = get()
-    if (mood === 'sleepy') return
-    if (Date.now() - lastInteractionTime > SLEEPY_IDLE_MS) {
-      const timer = get().celebratingTimer
-      if (timer) clearTimeout(timer)
-      set({ mood: 'sleepy', celebratingTimer: null })
+  getHappiness: (modelId: string): number => {
+    return get().happiness[modelId] ?? DEFAULT_HAPPINESS
+  },
+
+  applyInteraction: (modelId: string, interaction: GestureType) => {
+    const delta = INTERACTION_HAPPINESS_DELTA[interaction] ?? 0
+    const prevMood = get().getMood(modelId)
+    set((state) => {
+      const current = state.happiness[modelId] ?? DEFAULT_HAPPINESS
+      return {
+        happiness: {
+          ...state.happiness,
+          [modelId]: Math.max(0, Math.min(100, current + delta)),
+        },
+      }
+    })
+    // Spawn mood emoji if mood changed
+    const newMood = get().getMood(modelId)
+    if (newMood !== prevMood) {
+      // Dynamic import to avoid circular dependency
+      import('../components/MoodEmojis').then(({ spawnMoodChangeEmoji }) => {
+        spawnMoodChangeEmoji(newMood, modelId)
+      })
     }
   },
 
-  recordInteraction: () => {
-    const { mood } = get()
-    set({ lastInteractionTime: Date.now() })
-    if (mood === 'sleepy') {
-      set({ mood: 'curious' })
-    }
+  tickRecovery: () => {
+    set((state) => {
+      const updated = { ...state.happiness }
+      for (const modelId of Object.keys(updated)) {
+        const current = updated[modelId]
+        if (current < RECOVERY_TARGET) {
+          updated[modelId] = Math.min(RECOVERY_TARGET, current + RECOVERY_RATE)
+        }
+      }
+      return { happiness: updated }
+    })
   },
 }))

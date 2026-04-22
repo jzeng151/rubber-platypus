@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { Environment } from '@react-three/drei'
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier'
 import { PlatypusModel, type PlatypusModelHandle } from './PlatypusModel'
+import { MoodEmojis } from './MoodEmojis'
 import { useModelStore } from '../store/useModelStore'
 import { ALL_MODELS } from '../lib/modelConfigs'
 
@@ -80,6 +81,7 @@ export function PlatypusViewport() {
         <Physics gravity={[0, -4, 0]}>
           <BoundaryWalls />
           <PlatypusModel ref={modelRef} key={selectedModelId} modelConfig={modelConfig} />
+          <MoodEmojis />
         </Physics>
       </Canvas>
       <div style={{

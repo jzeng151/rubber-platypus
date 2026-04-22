@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useChatStore } from '../store/useChatStore'
-import { useMoodStore } from '../store/useMoodStore'
 import { sendMessage } from '../lib/socratic'
 import { generateQuackResponse, playQuackSound } from '../lib/quack'
-import { detectMood } from '../lib/detectMood'
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages)
@@ -21,14 +19,6 @@ export function ChatPanel() {
     addMessage({ role: 'user', content: text, timestamp: Date.now() })
     setInput('')
 
-    // Mood detection from user message
-    const currentMood = useMoodStore.getState().mood
-    const newMood = detectMood(text, currentMood)
-    if (newMood) {
-      useMoodStore.getState().transitionMood(newMood)
-    }
-    useMoodStore.getState().recordInteraction()
-
     if (mode === 'quack') {
       // Client-side quack: no API call
       const quack = generateQuackResponse(text)
@@ -42,8 +32,10 @@ export function ChatPanel() {
     try {
       const result = await sendMessage(useChatStore.getState().messages)
       addMessage({ role: 'assistant', content: result.response, timestamp: Date.now() })
+      playQuackSound('short')
     } catch {
       addMessage({ role: 'assistant', content: '*confused platypus noises*', timestamp: Date.now() })
+      playQuackSound('owoooo')
     } finally {
       setLoading(false)
     }

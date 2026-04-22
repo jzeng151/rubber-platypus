@@ -6,8 +6,11 @@ import type { Group, Object3D, SkinnedMesh, Euler, Vector3 } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { type GestureType } from '../lib/classifyGesture'
 import { type ModelConfig } from '../lib/modelConfigs'
+import { INTERACTION_HAPPINESS_DELTA } from '../lib/moodMachine'
+import { playInteractionQuack } from '../lib/quack'
 import { useInteractionStore } from '../store/useInteractionStore'
 import { useMoodStore, type Mood } from '../store/useMoodStore'
+import { spawnInteractionEmoji, setModelWorldPos } from './MoodEmojis'
 
 interface AnimationState {
   type: GestureType | null
@@ -131,6 +134,9 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle, PlatypusModelProps>
     const now = performance.now()
     dismissHint(gesture)
     setActiveAction(gesture)
+    useMoodStore.getState().applyInteraction(modelConfig.id, gesture)
+    spawnInteractionEmoji(gesture, modelConfig.id)
+    playInteractionQuack(INTERACTION_HAPPINESS_DELTA[gesture] ?? 0)
 
     switch (gesture) {
       case 'pet':
@@ -252,6 +258,7 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle, PlatypusModelProps>
     // Safety clamp: keep platypus inside visible area
     if (rb) {
       const p = rb.translation()
+      setModelWorldPos(p.x, p.y, p.z, modelConfig.headOffset)
       const clamped = false
         || Math.abs(p.x) > 1.3
         || p.y < -0.1 || p.y > 2.8
@@ -377,7 +384,7 @@ export const PlatypusModel = forwardRef<PlatypusModelHandle, PlatypusModelProps>
         clearActiveAction()
       }
     } else {
-      const currentMood = useMoodStore.getState().mood
+      const currentMood = useMoodStore.getState().getMood(modelConfig.id)
       applyMoodAnimation(currentMood, time, b)
     }
 
@@ -413,26 +420,26 @@ function applyMoodAnimation(
   b: BoneCache,
 ) {
   switch (mood) {
-    case 'curious':
-      if (b.hips) b.hips.rotation.y = Math.sin(time) * 0.1
+    case 'happy':
+      if (b.hips) b.hips.rotation.y = Math.sin(time) * 0.08
       if (b.head) b.head.rotation.z = Math.sin(time * 1.5) * 0.03
       break
-    case 'encouraged':
-      if (b.spine01) b.spine01.rotation.x = -0.05
-      if (b.head) b.head.rotation.z = Math.sin(time * 2) * 0.04
+    case 'content':
+      if (b.hips) b.hips.rotation.y = Math.sin(time * 0.6) * 0.04
+      if (b.head) b.head.rotation.z = Math.sin(time) * 0.02
       break
-    case 'celebrating':
-      if (b.leftArm) b.leftArm.rotation.z = Math.sin(time * 8) * 0.5
-      if (b.rightArm) b.rightArm.rotation.z = -Math.sin(time * 8) * 0.5
-      break
-    case 'sleepy':
-      if (b.neck) b.neck.rotation.x = 0.15
-      if (b.head) b.head.rotation.z = 0
+    case 'sad':
+      if (b.head) b.head.rotation.z = 0.04
+      if (b.neck) b.neck.rotation.x = 0.08
       if (b.spine) {
-        const breathe = Math.sin(time * 0.8) * 0.02
+        const breathe = Math.sin(time * 0.6) * 0.01
         b.spine.scale.y = 1 + breathe
         b.spine.scale.x = 1 - breathe * 0.5
       }
+      break
+    case 'angry':
+      if (b.head) b.head.rotation.z = Math.sin(time * 8) * 0.06
+      if (b.spine) b.spine.rotation.z = Math.sin(time * 6) * 0.03
       break
   }
 }

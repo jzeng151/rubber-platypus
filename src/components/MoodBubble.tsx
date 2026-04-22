@@ -1,20 +1,38 @@
 import { useMoodStore, type Mood } from '../store/useMoodStore'
+import { useModelStore } from '../store/useModelStore'
 
-const moodDisplay: Record<Mood, { label: string; emoji: string; text: string }> = {
-  curious: { label: 'curious', emoji: '🤔', text: 'Hmm, what\'s going on here...' },
-  encouraged: { label: 'encouraged', emoji: '💡', text: 'Getting somewhere!' },
-  celebrating: { label: 'celebrating', emoji: '🎉', text: 'You got it!' },
-  sleepy: { label: 'sleepy', emoji: '😴', text: 'zzz...' },
+const moodDisplay: Record<Mood, { label: string; emoji: string }> = {
+  happy: { label: 'happy', emoji: '😊' },
+  content: { label: 'content', emoji: '😌' },
+  sad: { label: 'sad', emoji: '😢' },
+  angry: { label: 'angry', emoji: '😤' },
 }
 
 export function MoodBubble() {
-  const mood = useMoodStore((s) => s.mood)
+  const selectedModelId = useModelStore((s) => s.selectedModelId)
+  const mood = useMoodStore((s) => s.getMood(selectedModelId))
+  const happiness = useMoodStore((s) => s.getHappiness(selectedModelId))
   const display = moodDisplay[mood]
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div className="mood-indicator">
-        mood: {display.emoji} {display.label}
+        {display.emoji} {display.label}
+      </div>
+      <div style={{
+        width: 60,
+        height: 6,
+        background: '#e0e0e0',
+        borderRadius: 3,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${happiness}%`,
+          height: '100%',
+          background: happiness >= 80 ? '#7cb342' : happiness >= 50 ? '#ffb300' : happiness >= 25 ? '#e65100' : '#c62828',
+          borderRadius: 3,
+          transition: 'width 0.3s, background 0.3s',
+        }} />
       </div>
     </div>
   )

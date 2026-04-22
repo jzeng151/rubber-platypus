@@ -1,12 +1,13 @@
 import { Howl } from 'howler'
 
-type QuackType = 'short' | 'long' | 'question' | 'loud'
+type QuackType = 'short' | 'long' | 'question' | 'loud' | 'owoooo'
 
 const quackSounds: Record<QuackType, Howl> = {
-  short: new Howl({ src: ['/sounds/quack-short.wav'], volume: 0.7 }),
-  long: new Howl({ src: ['/sounds/quack-long.wav'], volume: 0.7 }),
-  question: new Howl({ src: ['/sounds/quack-question.wav'], volume: 0.7 }),
-  loud: new Howl({ src: ['/sounds/quack-loud.wav'], volume: 0.9 }),
+  short: new Howl({ src: ['/sounds/duck-short.ogg'], volume: 0.7 }),
+  long: new Howl({ src: ['/sounds/duck-long.ogg'], volume: 0.7 }),
+  question: new Howl({ src: ['/sounds/duck-question.ogg'], volume: 0.7 }),
+  loud: new Howl({ src: ['/sounds/duck-exclaim.ogg'], volume: 0.9 }),
+  owoooo: new Howl({ src: ['/sounds/duck-owoooo.ogg'], volume: 0.7 }),
 }
 
 let currentSound: Howl | null = null
@@ -23,6 +24,10 @@ export function playQuackSound(type: QuackType) {
   sound.on('end', () => {
     if (currentSound === sound) currentSound = null
   })
+}
+
+export function playInteractionQuack(delta: number) {
+  playQuackSound(delta > 0 ? 'short' : 'owoooo')
 }
 
 const SHORT_QUACKS = [
@@ -53,11 +58,19 @@ const LOUD_QUACKS = [
   'QUAAACK!',
 ]
 
+const OWOOOO_QUACKS = [
+  '*owoooo*',
+  'Owoooo!',
+  'Ow-ooooo...',
+  '*mournful howl*',
+]
+
 const pools: Record<QuackType, string[]> = {
   short: SHORT_QUACKS,
   long: LONG_QUACKS,
   question: QUESTION_QUACKS,
   loud: LOUD_QUACKS,
+  owoooo: OWOOOO_QUACKS,
 }
 
 function pickRandom(pool: string[]): string {

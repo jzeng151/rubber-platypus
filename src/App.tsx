@@ -8,10 +8,10 @@ import { ChatPanel } from './components/ChatPanel'
 import { useMoodStore } from './store/useMoodStore'
 
 function App() {
-  // Check for idle (sleepy mood) every 30 seconds
+  // Happiness recovery tick every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      useMoodStore.getState().checkIdle()
+      useMoodStore.getState().tickRecovery()
     }, 30000)
     return () => clearInterval(interval)
   }, [])
