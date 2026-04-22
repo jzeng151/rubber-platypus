@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useChatStore } from '../store/useChatStore'
 import { sendMessage } from '../lib/socratic'
-import { generateQuackResponse, playQuackSound } from '../lib/quack'
+import { generateQuackResponse, classifyResponseSound, playQuackSound } from '../lib/quack'
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages)
@@ -21,8 +21,8 @@ export function ChatPanel() {
 
     if (mode === 'quack') {
       // Client-side quack: no API call
-      const quack = generateQuackResponse(text)
-      playQuackSound(quack.endsWith('?') ? 'question' : quack === quack.toUpperCase() ? 'loud' : text.length < 20 ? 'short' : 'long')
+      const { text: quack, type } = generateQuackResponse(text)
+      playQuackSound(type)
       addMessage({ role: 'assistant', content: quack, timestamp: Date.now() })
       return
     }
@@ -32,7 +32,7 @@ export function ChatPanel() {
     try {
       const result = await sendMessage(useChatStore.getState().messages)
       addMessage({ role: 'assistant', content: result.response, timestamp: Date.now() })
-      playQuackSound('short')
+      playQuackSound(classifyResponseSound(result.response))
     } catch {
       addMessage({ role: 'assistant', content: '*confused platypus noises*', timestamp: Date.now() })
       playQuackSound('owoooo')

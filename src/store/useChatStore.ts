@@ -19,11 +19,11 @@ interface ChatStore {
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
-  mode: 'socratic',
+  mode: 'quack',
   messages: [
     {
       role: 'assistant',
-      content: "Hey! I'm Perry. What are you stuck on? Walk me through it.",
+      content: 'Quack!',
       timestamp: Date.now(),
     },
   ],
